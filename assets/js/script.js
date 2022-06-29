@@ -14,6 +14,10 @@ var createTask = function(taskText, taskDate, taskList) {
   taskLi.append(taskSpan, taskP);
 
 
+  // check due date
+  auditTask(taskLi);
+
+
   // append to ul list on the page
   $("#list-" + taskList).append(taskLi);
 };
@@ -33,7 +37,6 @@ var loadTasks = function() {
 
   // loop over object properties
   $.each(tasks, function(list, arr) {
-    console.log(list, arr);
     // then loop over sub-array
     arr.forEach(function(task) {
       createTask(task.text, task.date, list);
@@ -46,6 +49,113 @@ var saveTasks = function() {
 };
 
 
+// task date checker
+var auditTask = function(taskEl) {
+  var date = $(taskEl).find("span").text().trim();
+
+  var time = moment(date, "L").set("hour", 17);
+
+  $(taskEl).removeClass("list-group-item-warning list-group-item-danger");
+
+  if (moment().isAfter(time)) {
+    $(taskEl).addClass("list-group-item-danger");
+  }
+  else if (Math.abs(moment().diff(time, "days")) <= 2) {
+    $(taskEl).addClass("list-group-item-warning");
+  }
+}
+
+
+// list item edit selection
+$(".list-group").on("click", "p", function() {
+  var text = $(this)
+    .text()
+    .trim();
+
+  var textInput = $("<textarea>")
+    .addClass("form-control")
+    .val(text);
+
+  $(this).replaceWith(textInput);
+  textInput.trigger("focus");
+});
+
+// list item edit de-selection
+$(".list-group").on("blur", "textarea", function() {
+  var text = $(this)
+    .val()
+    .trim();
+
+  var status = $(this)
+    .closest(".list-group")
+    .attr("id")
+    .replace("list-", "");
+
+  var index = $(this)
+    .closest(".list-group-item")
+    .index();
+
+  tasks[status][index].text = text;
+  saveTasks();
+
+  var taskP = $("<p>")
+    .addClass("m-1")
+    .text(text);
+
+  $(this).replaceWith(taskP);
+});
+
+
+// list item edit date selection
+$(".list-group").on("click", "span", function() {
+  var date = $(this)
+    .text()
+    .trim();
+
+  var dateInput = $("<input>")
+    .attr("type", "text")
+    .addClass("form-control")
+    .val(date);
+
+  $(this).replaceWith(dateInput);
+
+  dateInput.datepicker({
+    minDate: 1,
+    onClose: function() {
+      $(this).trigger("change");
+    }
+  });
+
+  dateInput.trigger("focus");
+});
+
+
+// list item edit date de-selection
+$(".list-group").on("change", "input[type='text']", function() {
+  var date = $(this)
+    .val()
+    .trim();
+
+  var status = $(this)
+    .closest(".list-group")
+    .attr("id")
+    .replace("list-", "");
+
+  var index = $(this)
+    .closest(".list-group-item")
+    .index();
+
+  tasks[status][index].date = date;
+  saveTasks();
+
+  var taskSpan = $("<span>")
+    .addClass("badge badge-primary badge-pill")
+    .text(date);
+
+  $(this).replaceWith(taskSpan);
+
+  auditTask($(taskSpan).closest(".list-group-item"));
+})
 
 
 // modal was triggered
@@ -61,7 +171,7 @@ $("#task-form-modal").on("shown.bs.modal", function() {
 });
 
 // save button in modal was clicked
-$("#task-form-modal .btn-primary").click(function() {
+$("#task-form-modal .btn-save").click(function() {
   // get form values
   var taskText = $("#modalTaskDescription").val();
   var taskDate = $("#modalDueDate").val();
@@ -90,6 +200,93 @@ $("#remove-tasks").on("click", function() {
   }
   saveTasks();
 });
+
+
+// list sortables
+$(".card .list-group").sortable({
+  connectWith: $(".card .list-group"),
+  scroll: false,
+  tolerance: "pointer",
+  helper: "clone",
+  activate: function(event) {
+    console.log("activate", this);
+    $(this).addClass("dropover");
+    $(".bottom-trash").addClass("bottom-trash-drag");
+  },
+  deactivate: function(event) {
+    console.log("deactivate", this);
+    $(this).removeClass("dropover");
+    $(".bottom-trash").removeClass("bottom-trash-drag");
+  },
+  over: function(event) {
+    console.log("over", event.target);
+    $(event.target).addClass("dropover-active");
+  },
+  out: function(event) {
+    console.log("out", event.target);
+    $(event.target).removeClass("dropover-active");
+  },
+  update: function(event) {
+    var tempArr = [];
+
+    $(this).children().each(function() {
+      var text = $(this)
+        .find("p")
+        .text()
+        .trim();
+
+      var date = $(this)
+        .find("span")
+        .text()
+        .trim();
+
+      tempArr.push({
+        text: text,
+        date: date
+      })
+    });
+    var arrName = $(this)
+      .attr("id")
+      .replace("list-", "");
+
+    tasks[arrName] = tempArr;
+    saveTasks();
+  }
+});
+
+
+// trash droppable
+$("#trash").droppable({
+  accept: ".card .list-group-item",
+  tolerance: "touch",
+  drop: function(event, ui) {
+    console.log("drop");
+    ui.draggable.remove();
+  },
+  over: function(event, ui) {
+    console.log("over");
+    $(".bottom-trash").addClass("bottom-trash-active");
+  },
+  out: function(event, ui) {
+    console.log("out");
+    $(".bottom-trash").removeClass("bottom-trash-active");
+  }
+});
+
+
+// datepicker
+$("#modalDueDate").datepicker({
+  minDate: 1
+});
+
+
+// task check refresher
+setInterval(function() {
+  $(".card .list-group-item").each(function(index, el) {
+    auditTask(el);
+  });
+}, 1800000);
+
 
 // load tasks for the first time
 loadTasks();
